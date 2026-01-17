@@ -1,0 +1,28 @@
+# FastAPI and server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Database
+sqlalchemy==2.0.25
+asyncpg==0.29.0
+alembic==1.13.1
+
+# Image processing
+Pillow==10.2.0
+opencv-python-headless==4.9.0.80
+numpy==1.26.3
+
+# Face detection and analysis
+insightface==0.7.3
+onnxruntime==1.16.3
+
+# HTTP client for Nano Banana API
+httpx==0.26.0
+
+# Utilities
+python-dotenv==1.0.0
+aiofiles==23.2.1
+uuid7==0.1.0
