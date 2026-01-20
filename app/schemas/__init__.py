@@ -2,7 +2,6 @@ from app.schemas.user import (
     UserCreate,
     UserResponse,
     UserRegisterResponse,
-    FacialAttributesSchema,
 )
 from app.schemas.generation import (
     GenerateImageRequest,
@@ -14,7 +13,6 @@ __all__ = [
     "UserCreate",
     "UserResponse",
     "UserRegisterResponse",
-    "FacialAttributesSchema",
     "GenerateImageRequest",
     "GenerateImageResponse",
     "GeneratedImageInfo",

@@ -30,11 +30,6 @@ class GenerateImageRequest(BaseModel):
         le=4,
         description="Number of images to generate"
     )
-    negative_prompt: str | None = Field(
-        default=None,
-        max_length=500,
-        description="What to avoid in the generated image"
-    )
 
 
 class GeneratedImageInfo(BaseModel):

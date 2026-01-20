@@ -1,262 +1,142 @@
-import base64
-import httpx
-from dataclasses import dataclass
+import io
+from google import genai
+from google.genai import types
+from PIL import Image
 from app.config import get_settings
 
 settings = get_settings()
-
-
-@dataclass
-class ReferenceImages:
-    """Collection of reference images for generation."""
-    face_image: bytes
-    upper_body_image: bytes | None = None
-    full_image: bytes | None = None
 
 
 class NanoBananaService:
     """
     Service for generating images using Google's Nano Banana (Gemini Image Generation) API.
 
-    Nano Banana supports up to 5 reference images for person/subject generation,
-    allowing us to maintain facial features and body characteristics when generating new images.
+    Uses a single reference image to maintain facial features when generating new images.
     """
 
     def __init__(self):
-        self.api_key = settings.nano_banana_api_key
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
-        # Use gemini-2.0-flash-exp for speed, or gemini-2.0-flash-preview-image-generation
-        self.model = "gemini-2.0-flash-exp"
+        self.client = genai.Client(api_key=settings.nano_banana_api_key)
+        self.model = "gemini-3-pro-image-preview"
 
-    def _image_to_base64(self, image_bytes: bytes) -> str:
-        """Convert image bytes to base64 string."""
-        return base64.b64encode(image_bytes).decode("utf-8")
+    def _bytes_to_pil_image(self, image_bytes: bytes) -> Image.Image:
+        """Convert image bytes to PIL Image."""
+        return Image.open(io.BytesIO(image_bytes))
 
-    def _base64_to_image(self, base64_string: str) -> bytes:
-        """Convert base64 string to image bytes."""
-        return base64.b64decode(base64_string)
+    def _pil_image_to_bytes(self, pil_image: Image.Image, format: str = "JPEG") -> bytes:
+        """Convert PIL Image to bytes."""
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format=format)
+        buffer.seek(0)
+        return buffer.read()
 
-    def _build_prompt_with_attributes(
-        self,
-        base_prompt: str,
-        person_description: str | None = None,
-        negative_prompt: str | None = None,
-    ) -> str:
+    def _build_generation_prompt(self, user_prompt: str) -> str:
         """
-        Build an enhanced prompt with person attributes.
-
-        Args:
-            base_prompt: The user's scene description
-            person_description: Description from facial attributes (e.g., "male adult")
-            negative_prompt: Things to avoid
+        Build a strict prompt that instructs Nano Banana to generate an image
+        while strictly preserving the person's facial features from the reference.
         """
-        parts = []
+        prompt = f"""You are an AI image generator specialized in creating images of a SPECIFIC person while maintaining their EXACT identity.
 
-        # Start with instruction to use reference images
-        parts.append("Generate a realistic photo of the person shown in the reference images")
+TASK: Generate a new image of the EXACT SAME person shown in the reference image, depicting them in this scenario: {user_prompt}
 
-        # Add person description if available
-        if person_description:
-            parts.append(f"(a {person_description})")
+CRITICAL IDENTITY PRESERVATION RULES - YOU MUST FOLLOW ALL OF THESE:
 
-        # Add the scene/activity
-        parts.append(f"in this scenario: {base_prompt}")
+1. FACE: The generated face MUST be identical to the reference image:
+   - Same exact facial structure and bone structure
+   - Same eye shape, eye color, eye spacing
+   - Same nose shape and size
+   - Same lip shape and mouth structure
+   - Same eyebrow shape and thickness
+   - Same jawline and chin shape
+   - Same forehead shape and hairline
+   - Same ear shape if visible
 
-        # Add quality instructions
-        parts.append("Make sure to preserve the exact facial features, skin tone, and overall appearance from the reference images.")
-        parts.append("High quality, photorealistic, natural lighting.")
+2. SKIN: Preserve exact skin characteristics:
+   - Same skin tone and complexion
+   - Same skin texture
+   - Any visible moles, freckles, or birthmarks
 
-        # Add negative prompt
-        if negative_prompt:
-            parts.append(f"Avoid: {negative_prompt}")
+3. HAIR: Keep hair characteristics consistent:
+   - Same hair color
+   - Same hair texture (straight, wavy, curly)
+   - Similar hairstyle (can be slightly different due to scene context)
 
-        return " ".join(parts)
+4. BODY: Maintain body characteristics:
+   - Same approximate body type/build
+   - Same proportions
 
-    async def generate_image_with_references(
+5. DISTINGUISHING FEATURES: Preserve ALL unique identifying features:
+   - Facial hair if present (beard, mustache)
+   - Glasses if worn in reference
+   - Any visible scars or unique marks
+
+OUTPUT REQUIREMENTS:
+- Photorealistic, high-quality image
+- Natural lighting appropriate for the scene
+- The person should be clearly recognizable as the SAME individual from the reference
+- Only change the setting/scene/activity/clothing as needed for: {user_prompt}
+
+DO NOT:
+- Change any facial features
+- Alter skin tone or complexion
+- Generate a different person
+- Modify the person's apparent age significantly
+- Change eye color or facial structure"""
+
+        return prompt
+
+    async def generate_image(
         self,
         prompt: str,
-        reference_images: ReferenceImages,
-        person_description: str | None = None,
+        reference_image: bytes,
         aspect_ratio: str = "1:1",
         number_of_images: int = 1,
-        negative_prompt: str | None = None,
     ) -> list[bytes]:
         """
-        Generate images using Nano Banana with multiple reference images.
+        Generate images using Nano Banana with a reference image.
 
-        Sends face crop, upper body crop, and full image as references
-        to maintain consistent appearance.
+        The reference image is sent along with a strict prompt that instructs
+        the model to preserve the person's facial features exactly.
 
         Args:
-            prompt: Text description of the scene/activity
-            reference_images: Collection of reference images (face, upper body, full)
-            person_description: Description from facial attributes for prompt enhancement
-            aspect_ratio: Output image aspect ratio (1:1, 16:9, 9:16, 4:3, 3:4)
+            prompt: User's description of the scene/activity
+            reference_image: The reference image bytes (original uploaded image)
+            aspect_ratio: Output aspect ratio
             number_of_images: Number of images to generate (1-4)
-            negative_prompt: What to avoid in the generated image
 
         Returns:
             List of generated image bytes
         """
-        # Build enhanced prompt
-        full_prompt = self._build_prompt_with_attributes(
-            base_prompt=prompt,
-            person_description=person_description,
-            negative_prompt=negative_prompt,
-        )
+        # Build the strict prompt with identity preservation instructions
+        full_prompt = self._build_generation_prompt(user_prompt=prompt)
 
-        # Build parts array with text and multiple reference images
-        parts = [{"text": full_prompt}]
+        # Convert reference image bytes to PIL Image
+        reference_pil_image = self._bytes_to_pil_image(reference_image)
 
-        # Add face image (always included - most important)
-        parts.append({
-            "inlineData": {
-                "mimeType": "image/jpeg",
-                "data": self._image_to_base64(reference_images.face_image)
-            }
-        })
+        # Build contents list with prompt and reference image
+        contents = [full_prompt, reference_pil_image]
 
-        # Add upper body image if available
-        if reference_images.upper_body_image:
-            parts.append({
-                "inlineData": {
-                    "mimeType": "image/jpeg",
-                    "data": self._image_to_base64(reference_images.upper_body_image)
-                }
-            })
-
-        # Add full image if available
-        if reference_images.full_image:
-            parts.append({
-                "inlineData": {
-                    "mimeType": "image/jpeg",
-                    "data": self._image_to_base64(reference_images.full_image)
-                }
-            })
-
-        # Build the request payload
-        payload = {
-            "contents": [
-                {
-                    "parts": parts
-                }
-            ],
-            "generationConfig": {
-                "responseModalities": ["TEXT", "IMAGE"],
-                "candidateCount": number_of_images,
-            }
-        }
-
-        # Make the API request
-        url = f"{self.base_url}/{self.model}:generateContent"
-
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                url,
-                json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "x-goog-api-key": self.api_key,
-                }
-            )
-
-            if response.status_code != 200:
-                error_detail = response.text
-                raise Exception(f"Nano Banana API error ({response.status_code}): {error_detail}")
-
-            result = response.json()
-
-        # Extract generated images from response
+        # Generate images using the SDK
         generated_images = []
 
-        if "candidates" in result:
-            for candidate in result["candidates"]:
-                if "content" in candidate and "parts" in candidate["content"]:
-                    for part in candidate["content"]["parts"]:
-                        if "inlineData" in part:
-                            image_base64 = part["inlineData"]["data"]
-                            image_bytes = self._base64_to_image(image_base64)
-                            generated_images.append(image_bytes)
-
-        return generated_images
-
-    # Keep backward compatible method
-    async def generate_image_with_reference(
-        self,
-        prompt: str,
-        reference_face_image: bytes,
-        aspect_ratio: str = "1:1",
-        number_of_images: int = 1,
-        negative_prompt: str | None = None,
-    ) -> list[bytes]:
-        """
-        Generate images using a single reference face image.
-        Backward compatible method - use generate_image_with_references for better results.
-        """
-        return await self.generate_image_with_references(
-            prompt=prompt,
-            reference_images=ReferenceImages(face_image=reference_face_image),
-            aspect_ratio=aspect_ratio,
-            number_of_images=number_of_images,
-            negative_prompt=negative_prompt,
-        )
-
-    async def generate_image_simple(
-        self,
-        prompt: str,
-        aspect_ratio: str = "1:1",
-        number_of_images: int = 1,
-        negative_prompt: str | None = None,
-    ) -> list[bytes]:
-        """
-        Generate images without a reference (simple text-to-image).
-        """
-        full_prompt = prompt
-        if negative_prompt:
-            full_prompt += f". Avoid: {negative_prompt}"
-
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": full_prompt}
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "responseModalities": ["TEXT", "IMAGE"],
-                "candidateCount": number_of_images,
-            }
-        }
-
-        url = f"{self.base_url}/{self.model}:generateContent"
-
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                url,
-                json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "x-goog-api-key": self.api_key,
-                }
+        for _ in range(number_of_images):
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_modalities=["TEXT", "IMAGE"],
+                    image_config=types.ImageConfig(
+                        aspect_ratio=aspect_ratio,
+                    ),
+                ),
             )
 
-            if response.status_code != 200:
-                error_detail = response.text
-                raise Exception(f"Nano Banana API error ({response.status_code}): {error_detail}")
-
-            result = response.json()
-
-        generated_images = []
-
-        if "candidates" in result:
-            for candidate in result["candidates"]:
-                if "content" in candidate and "parts" in candidate["content"]:
-                    for part in candidate["content"]["parts"]:
-                        if "inlineData" in part:
-                            image_base64 = part["inlineData"]["data"]
-                            image_bytes = self._base64_to_image(image_base64)
-                            generated_images.append(image_bytes)
+            # Extract generated images from response
+            if response.candidates:
+                for candidate in response.candidates:
+                    if candidate.content and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if part.inline_data and part.inline_data.data:
+                                generated_images.append(part.inline_data.data)
 
         return generated_images
 

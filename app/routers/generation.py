@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models import User, GeneratedImage
 from app.schemas import GenerateImageRequest, GenerateImageResponse, GeneratedImageInfo
-from app.services.imagen import imagen_service, ReferenceImages
+from app.services.imagen import imagen_service
 from app.services.storage import storage
 
 router = APIRouter(prefix="/generate", tags=["generation"])
@@ -20,10 +20,10 @@ async def generate_image(
     Generate personalized images for a user.
 
     The system will:
-    1. Fetch all stored reference images (face, upper body, full image)
-    2. Get the user's facial attributes for prompt enhancement
-    3. Generate images using Nano Banana with all references
-    4. Store and return the generated images
+    1. Fetch the user's best reference image
+    2. Send it to Nano Banana with your prompt
+    3. Generate an image preserving the person's facial features
+    4. Store and return the generated image
 
     Example prompts:
     - "enjoying at a beach with sunset"
@@ -31,6 +31,7 @@ async def generate_image(
     - "reading a book in a cozy cafe"
     - "hiking in beautiful mountains"
     - "giving a presentation in a conference room"
+    - "cooking in a kitchen"
     """
     # Get user
     result = await db.execute(select(User).where(User.id == request.user_id))
@@ -42,43 +43,30 @@ async def generate_image(
             detail=f"User with ID {request.user_id} not found. Please register first."
         )
 
-    # Load all reference images from storage
+    # Get the reference image key (first image)
+    reference_key = user.get_reference_key()
+    if not reference_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No reference image found for user."
+        )
+
+    # Load the reference image from storage
     try:
-        face_image = await storage.download_image(user.face_image_key)
-
-        upper_body_image = None
-        if user.upper_body_image_key:
-            upper_body_image = await storage.download_image(user.upper_body_image_key)
-
-        full_image = None
-        if user.full_image_key:
-            full_image = await storage.download_image(user.full_image_key)
-
+        reference_image = await storage.download_image(reference_key)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve reference images: {str(e)}"
+            detail=f"Failed to retrieve reference image: {str(e)}"
         )
 
-    # Build reference images object
-    reference_images = ReferenceImages(
-        face_image=face_image,
-        upper_body_image=upper_body_image,
-        full_image=full_image,
-    )
-
-    # Get person description from attributes
-    person_description = user.get_prompt_description()
-
-    # Generate images with all references and attributes
+    # Generate image with reference
     try:
-        generated_image_bytes_list = await imagen_service.generate_image_with_references(
+        generated_image_bytes_list = await imagen_service.generate_image(
             prompt=request.prompt,
-            reference_images=reference_images,
-            person_description=person_description,
+            reference_image=reference_image,
             aspect_ratio=request.aspect_ratio.value,
             number_of_images=request.number_of_images,
-            negative_prompt=request.negative_prompt,
         )
     except Exception as e:
         raise HTTPException(
@@ -96,20 +84,20 @@ async def generate_image(
     generated_images_info = []
 
     for i, image_bytes in enumerate(generated_image_bytes_list):
-        # Create database record first to get ID
+        # Create database record
         generated_image = GeneratedImage(
             user_id=user.id,
             prompt=request.prompt,
-            image_s3_key="",  # Will update after upload
+            image_s3_key="",
         )
         db.add(generated_image)
         await db.flush()
 
-        # Upload to local storage
+        # Upload to storage
         storage_key = f"generated/{user.id}/{generated_image.id}.jpg"
         await storage.upload_image(image_bytes, storage_key, content_type="image/jpeg")
 
-        # Update record with storage key and URL
+        # Update record
         generated_image.image_s3_key = storage_key
         image_url = await storage.get_url(storage_key)
         generated_image.image_url = image_url
@@ -158,7 +146,7 @@ async def get_generation_history(
     )
     images = result.scalars().all()
 
-    # Refresh URLs
+    # Build response with URLs
     images_info = []
     for img in images:
         if img.image_s3_key:

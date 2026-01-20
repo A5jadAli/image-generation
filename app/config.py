@@ -16,13 +16,10 @@ class Settings(BaseSettings):
 
     # Nano Banana API settings
     nano_banana_api_key: str = ""
-    nano_banana_api_url: str = "https://api.nanobanana.com/v1"  # Update with actual URL
 
-    # Face detection settings
-    min_face_size: int = 64
-    face_padding: float = 0.3  # 30% padding around detected face
-    min_images_required: int = 4
-    max_images_allowed: int = 10
+    # Image upload limits
+    min_images_required: int = 1
+    max_images_allowed: int = 5
 
     class Config:
         env_file = ".env"
