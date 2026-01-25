@@ -29,58 +29,110 @@ class NanoBananaService:
         buffer.seek(0)
         return buffer.read()
 
+    def _enhance_user_prompt(self, user_prompt: str) -> str:
+        """
+        Enhance a short user prompt with scene details and quality keywords.
+        """
+        prompt_lower = user_prompt.lower()
+
+        # Scene enhancement mappings
+        scene_enhancements = {
+            "beach": "golden hour sunlight, ocean waves, warm tropical tones",
+            "gym": "modern fitness equipment, motivational atmosphere, dynamic energy",
+            "cafe": "cozy warm ambiance, artistic interior, soft natural light",
+            "coffee": "cozy cafe setting, warm atmosphere, comfortable seating",
+            "office": "modern professional workspace, clean aesthetic, natural daylight",
+            "nature": "lush greenery, vibrant colors, fresh outdoor atmosphere",
+            "city": "urban street photography, architectural backdrop, city life",
+            "home": "comfortable interior, warm homely atmosphere, soft lighting",
+            "party": "festive decorations, celebratory atmosphere, vibrant energy",
+            "wedding": "elegant romantic setting, beautiful decorations, soft dreamy light",
+            "mountain": "majestic peaks, breathtaking scenery, adventure spirit",
+            "restaurant": "fine dining ambiance, elegant table setting, warm lighting",
+            "park": "green surroundings, peaceful environment, natural beauty",
+            "hiking": "scenic trail, outdoor adventure, natural landscape",
+            "graduation": "academic ceremony, proud achievement, formal setting",
+            "concert": "dynamic stage lighting, energetic atmosphere, live music vibes",
+        }
+
+        # Mood/expression mappings
+        mood_mappings = {
+            ("happy", "joy", "celebrating", "party", "fun", "laugh", "smile"):
+                "genuine warm smile, joyful sparkling eyes, radiating happiness",
+            ("confident", "business", "presentation", "professional", "meeting"):
+                "confident composed expression, self-assured posture, professional demeanor",
+            ("relaxed", "beach", "vacation", "spa", "peaceful", "calm"):
+                "serene relaxed expression, peaceful calm mood, comfortable natural pose",
+            ("excited", "adventure", "travel", "sports", "thrilled"):
+                "bright enthusiastic expression, excited eyes, dynamic energy",
+            ("romantic", "date", "wedding", "love", "dinner"):
+                "soft tender expression, warm loving gaze, romantic mood",
+            ("elegant", "gala", "formal", "luxury", "fashion"):
+                "graceful refined expression, sophisticated poise, elegant demeanor",
+            ("thoughtful", "reading", "studying", "working", "thinking"):
+                "contemplative thoughtful look, focused intelligent gaze",
+        }
+
+        # Build enhanced prompt
+        enhanced_parts = [user_prompt]
+
+        # Add scene enhancements
+        for scene, enhancement in scene_enhancements.items():
+            if scene in prompt_lower:
+                enhanced_parts.append(enhancement)
+                break
+
+        # Add mood/expression
+        expression_added = False
+        for keywords, expression in mood_mappings.items():
+            if any(kw in prompt_lower for kw in keywords):
+                enhanced_parts.append(expression)
+                expression_added = True
+                break
+
+        if not expression_added:
+            enhanced_parts.append("natural authentic expression, genuine emotion")
+
+        return ", ".join(enhanced_parts)
+
     def _build_generation_prompt(self, user_prompt: str) -> str:
         """
-        Build a strict prompt that instructs Nano Banana to generate an image
-        while strictly preserving the person's facial features from the reference.
+        Build a prompt that generates beautiful, realistic images
+        while preserving the person's facial features from the reference.
         """
-        prompt = f"""You are an AI image generator specialized in creating images of a SPECIFIC person while maintaining their EXACT identity.
+        # Enhance the user's short prompt
+        enhanced_scene = self._enhance_user_prompt(user_prompt)
 
-TASK: Generate a new image of the EXACT SAME person shown in the reference image, depicting them in this scenario: {user_prompt}
+        prompt = f"""Generate a stunning photorealistic image of the EXACT person from the reference photo in this scene: {enhanced_scene}
 
-CRITICAL IDENTITY PRESERVATION RULES - YOU MUST FOLLOW ALL OF THESE:
+IDENTITY PRESERVATION (CRITICAL):
+- Face MUST match reference exactly: same facial structure, eyes, nose, lips, jawline
+- Same skin tone, texture, and any visible marks (moles, freckles)
+- Same hair color and texture
+- Same body type and proportions
+- Preserve glasses, facial hair, or other distinguishing features if present
 
-1. FACE: The generated face MUST be identical to the reference image:
-   - Same exact facial structure and bone structure
-   - Same eye shape, eye color, eye spacing
-   - Same nose shape and size
-   - Same lip shape and mouth structure
-   - Same eyebrow shape and thickness
-   - Same jawline and chin shape
-   - Same forehead shape and hairline
-   - Same ear shape if visible
+IMAGE QUALITY REQUIREMENTS:
+- Professional photography quality, 8K ultra HD resolution
+- Beautiful natural lighting that complements the scene
+- Cinematic composition with artistic framing
+- Rich vibrant colors, perfect exposure
+- Sharp focus on the subject with pleasing depth of field
+- Detailed realistic skin texture (not overly smooth or artificial)
 
-2. SKIN: Preserve exact skin characteristics:
-   - Same skin tone and complexion
-   - Same skin texture
-   - Any visible moles, freckles, or birthmarks
+EXPRESSION & POSE (MUST PRESERVE IDENTITY):
+- Expressions must NOT alter underlying facial bone structure
+- When smiling: same eye shape, same nose, same jawline - only natural muscle movement
+- The face must remain instantly recognizable as the same person even with different expressions
+- Natural authentic expression appropriate for the scene
+- Eyes should look alive and expressive while keeping same eye shape and spacing
 
-3. HAIR: Keep hair characteristics consistent:
-   - Same hair color
-   - Same hair texture (straight, wavy, curly)
-   - Similar hairstyle (can be slightly different due to scene context)
+SCENE: {user_prompt}
+- Create an immersive, believable environment
+- Appropriate clothing and styling for the context
+- Harmonious color palette between subject and background
 
-4. BODY: Maintain body characteristics:
-   - Same approximate body type/build
-   - Same proportions
-
-5. DISTINGUISHING FEATURES: Preserve ALL unique identifying features:
-   - Facial hair if present (beard, mustache)
-   - Glasses if worn in reference
-   - Any visible scars or unique marks
-
-OUTPUT REQUIREMENTS:
-- Photorealistic, high-quality image
-- Natural lighting appropriate for the scene
-- The person should be clearly recognizable as the SAME individual from the reference
-- Only change the setting/scene/activity/clothing as needed for: {user_prompt}
-
-DO NOT:
-- Change any facial features
-- Alter skin tone or complexion
-- Generate a different person
-- Modify the person's apparent age significantly
-- Change eye color or facial structure"""
+The final image should look like a professional photograph taken by a skilled photographer, not AI-generated."""
 
         return prompt
 

@@ -71,8 +71,8 @@ class LocalStorage:
     async def ensure_storage_exists(self) -> None:
         """Ensure storage is ready (create directories)."""
         self._ensure_base_path()
-        # Create subdirectories for faces and generated images
-        (self.base_path / "faces").mkdir(exist_ok=True)
+        # Create subdirectories for users and generated images
+        (self.base_path / "users").mkdir(exist_ok=True)
         (self.base_path / "generated").mkdir(exist_ok=True)
 
 
