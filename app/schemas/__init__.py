@@ -8,6 +8,17 @@ from app.schemas.generation import (
     GenerateImageResponse,
     GeneratedImageInfo,
 )
+from app.schemas.video import (
+    GenerateVideoFromTextRequest,
+    GenerateVideoFromImageRequest,
+    GenerateVideoResponse,
+    GeneratedVideoInfo,
+)
+from app.schemas.tryon import (
+    VirtualTryonRequest,
+    VirtualTryonResponse,
+    GeneratedTryonInfo,
+)
 
 __all__ = [
     "UserCreate",
@@ -16,4 +27,11 @@ __all__ = [
     "GenerateImageRequest",
     "GenerateImageResponse",
     "GeneratedImageInfo",
+    "GenerateVideoFromTextRequest",
+    "GenerateVideoFromImageRequest",
+    "GenerateVideoResponse",
+    "GeneratedVideoInfo",
+    "VirtualTryonRequest",
+    "VirtualTryonResponse",
+    "GeneratedTryonInfo",
 ]

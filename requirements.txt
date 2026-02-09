@@ -1,20 +1,20 @@
 # FastAPI and server
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
-pydantic==2.5.3
-pydantic-settings==2.1.0
+fastapi==0.128.6
+uvicorn[standard]==0.40.0
+python-multipart==0.0.22
+pydantic==2.12.5
+pydantic-settings==2.12.0
 
 # Database
-sqlalchemy==2.0.25
-asyncpg==0.29.0
-alembic==1.13.1
+sqlalchemy==2.0.46
+asyncpg==0.31.0
+alembic==1.18.3
 
 # Google GenAI SDK for Nano Banana
-google-genai>=1.0.0
-Pillow>=10.0.0
+google-genai==1.62.0
+Pillow==12.1.0
 
 # Utilities
-python-dotenv==1.0.0
-aiofiles==23.2.1
-uuid-extensions==1.0.0
+python-dotenv==1.2.1
+aiofiles==25.1.0
+uuid-extension==0.2.0

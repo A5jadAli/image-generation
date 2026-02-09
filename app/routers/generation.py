@@ -43,28 +43,38 @@ async def generate_image(
             detail=f"User with ID {request.user_id} not found. Please register first."
         )
 
-    # Get the reference image key (first image)
-    reference_key = user.get_reference_key()
-    if not reference_key:
+    # Load ALL reference images — more angles = stronger face lock
+    reference_keys = user.reference_image_keys or []
+    if not reference_keys:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="No reference image found for user."
         )
 
-    # Load the reference image from storage
+    # Load primary reference (first image)
     try:
-        reference_image = await storage.download_image(reference_key)
+        reference_image = await storage.download_image(reference_keys[0])
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve reference image: {str(e)}"
         )
 
-    # Generate image with reference
+    # Load additional references for multi-angle face anchoring
+    additional_references = []
+    for key in reference_keys[1:]:
+        try:
+            img_bytes = await storage.download_image(key)
+            additional_references.append(img_bytes)
+        except Exception:
+            continue  # Skip failed loads
+
+    # Generate image with reference(s)
     try:
         generated_image_bytes_list = await imagen_service.generate_image(
             prompt=request.prompt,
             reference_image=reference_image,
+            additional_references=additional_references if additional_references else None,
             aspect_ratio=request.aspect_ratio.value,
             number_of_images=request.number_of_images,
         )

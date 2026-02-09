@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import String, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from uuid_extensions import uuid7
+from uuid_extension import uuid7
 
 from app.database import Base
 
@@ -29,6 +29,16 @@ class User(Base):
     # Relationship to generated images
     generated_images: Mapped[list["GeneratedImage"]] = relationship(
         "GeneratedImage", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    # Relationship to generated videos
+    generated_videos: Mapped[list["GeneratedVideo"]] = relationship(
+        "GeneratedVideo", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    # Relationship to generated try-ons
+    generated_tryons: Mapped[list["GeneratedTryon"]] = relationship(
+        "GeneratedTryon", back_populates="user", cascade="all, delete-orphan"
     )
 
     def get_reference_key(self) -> str | None:

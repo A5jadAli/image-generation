@@ -11,7 +11,9 @@ class NanoBananaService:
     """
     Service for generating images using Google's Nano Banana (Gemini Image Generation) API.
 
-    Uses a single reference image to maintain facial features when generating new images.
+    Supports:
+    1. Personalized image generation — preserves person's face from reference
+    2. Virtual try-on — puts person into uploaded clothing
     """
 
     def __init__(self):
@@ -29,13 +31,12 @@ class NanoBananaService:
         buffer.seek(0)
         return buffer.read()
 
+    # ─── Scene & mood enhancement ────────────────────────────────────────
+
     def _enhance_user_prompt(self, user_prompt: str) -> str:
-        """
-        Enhance a short user prompt with scene details and quality keywords.
-        """
+        """Add scene and mood details to a short user prompt."""
         prompt_lower = user_prompt.lower()
 
-        # Scene enhancement mappings
         scene_enhancements = {
             "beach": "golden hour sunlight, ocean waves, warm tropical tones",
             "gym": "modern fitness equipment, motivational atmosphere, dynamic energy",
@@ -55,119 +56,157 @@ class NanoBananaService:
             "concert": "dynamic stage lighting, energetic atmosphere, live music vibes",
         }
 
-        # Mood/expression mappings
         mood_mappings = {
             ("happy", "joy", "celebrating", "party", "fun", "laugh", "smile"):
-                "genuine warm smile, joyful sparkling eyes, radiating happiness",
+                "genuine warm smile, joyful eyes",
             ("confident", "business", "presentation", "professional", "meeting"):
-                "confident composed expression, self-assured posture, professional demeanor",
+                "confident composed expression, professional demeanor",
             ("relaxed", "beach", "vacation", "spa", "peaceful", "calm"):
-                "serene relaxed expression, peaceful calm mood, comfortable natural pose",
+                "serene relaxed expression, comfortable natural pose",
             ("excited", "adventure", "travel", "sports", "thrilled"):
-                "bright enthusiastic expression, excited eyes, dynamic energy",
+                "bright enthusiastic expression, dynamic energy",
             ("romantic", "date", "wedding", "love", "dinner"):
-                "soft tender expression, warm loving gaze, romantic mood",
+                "soft tender expression, warm gaze",
             ("elegant", "gala", "formal", "luxury", "fashion"):
-                "graceful refined expression, sophisticated poise, elegant demeanor",
+                "graceful refined expression, sophisticated poise",
             ("thoughtful", "reading", "studying", "working", "thinking"):
-                "contemplative thoughtful look, focused intelligent gaze",
+                "contemplative thoughtful look, focused gaze",
         }
 
-        # Build enhanced prompt
-        enhanced_parts = [user_prompt]
+        parts = [user_prompt]
 
-        # Add scene enhancements
         for scene, enhancement in scene_enhancements.items():
             if scene in prompt_lower:
-                enhanced_parts.append(enhancement)
+                parts.append(enhancement)
                 break
 
-        # Add mood/expression
         expression_added = False
         for keywords, expression in mood_mappings.items():
             if any(kw in prompt_lower for kw in keywords):
-                enhanced_parts.append(expression)
+                parts.append(expression)
                 expression_added = True
                 break
 
         if not expression_added:
-            enhanced_parts.append("natural authentic expression, genuine emotion")
+            parts.append("natural authentic expression")
 
-        return ", ".join(enhanced_parts)
+        return ", ".join(parts)
+
+    # ─── Prompt builders ─────────────────────────────────────────────────
 
     def _build_generation_prompt(self, user_prompt: str) -> str:
         """
-        Build a prompt that generates beautiful, realistic images
-        while preserving the person's facial features from the reference.
+        Build a concise, high-signal prompt for identity-preserving generation.
+
+        Key insight: Gemini responds better to SHORT, DIRECT identity instructions
+        than to walls of text. The reference image does most of the work — the prompt
+        just needs to anchor the model to it firmly.
         """
-        # Enhance the user's short prompt
         enhanced_scene = self._enhance_user_prompt(user_prompt)
 
-        prompt = f"""Generate a stunning photorealistic image of the EXACT person from the reference photo in this scene: {enhanced_scene}
-
-IDENTITY PRESERVATION (CRITICAL):
-- Face MUST match reference exactly: same facial structure, eyes, nose, lips, jawline
-- Same skin tone, texture, and any visible marks (moles, freckles)
-- Same hair color and texture
-- Same body type and proportions
-- Preserve glasses, facial hair, or other distinguishing features if present
-
-IMAGE QUALITY REQUIREMENTS:
-- Professional photography quality, 8K ultra HD resolution
-- Beautiful natural lighting that complements the scene
-- Cinematic composition with artistic framing
-- Rich vibrant colors, perfect exposure
-- Sharp focus on the subject with pleasing depth of field
-- Detailed realistic skin texture (not overly smooth or artificial)
-
-EXPRESSION & POSE (MUST PRESERVE IDENTITY):
-- Expressions must NOT alter underlying facial bone structure
-- When smiling: same eye shape, same nose, same jawline - only natural muscle movement
-- The face must remain instantly recognizable as the same person even with different expressions
-- Natural authentic expression appropriate for the scene
-- Eyes should look alive and expressive while keeping same eye shape and spacing
-
-SCENE: {user_prompt}
-- Create an immersive, believable environment
-- Appropriate clothing and styling for the context
-- Harmonious color palette between subject and background
-
-The final image should look like a professional photograph taken by a skilled photographer, not AI-generated."""
+        prompt = (
+            f"This is a photo of a specific person. Generate a new photorealistic image "
+            f"of THIS EXACT SAME PERSON in the following scene: {enhanced_scene}.\n\n"
+            f"CRITICAL RULES:\n"
+            f"1. The person's face must be IDENTICAL to the reference — same bone structure, "
+            f"same eyes, same nose, same lips, same jawline, same skin tone. Do NOT alter "
+            f"any facial feature. The person must be instantly recognizable.\n"
+            f"2. Preserve ALL distinguishing features: glasses, facial hair, moles, freckles, "
+            f"scars, birthmarks, hair color, hair texture, ear shape, eyebrow shape.\n"
+            f"3. Keep the same body type and proportions as the reference.\n"
+            f"4. Any expression change must only involve natural muscle movement — the underlying "
+            f"facial geometry must remain unchanged.\n"
+            f"5. Professional photography quality, cinematic lighting, sharp focus, realistic skin texture.\n\n"
+            f"Scene: {user_prompt}"
+        )
 
         return prompt
+
+    def _build_tryon_prompt(self, clothing_description: str = "") -> str:
+        """
+        Build prompt for virtual try-on.
+
+        Strategy: Two images are sent — Image 1 (person) and Image 2 (clothing).
+        The prompt instructs the model to dress the person in the exact garment.
+        """
+        base_prompt = (
+            "I am providing two images:\n"
+            "- IMAGE 1 (first image): A photo of a specific person. This is the PERSON reference.\n"
+            "- IMAGE 2 (second image): A photo of a clothing item/outfit. This is the CLOTHING reference.\n\n"
+            "TASK: Generate a new photorealistic image showing the EXACT SAME PERSON from Image 1 "
+            "wearing the EXACT SAME CLOTHING from Image 2.\n\n"
+            "PERSON IDENTITY RULES (NON-NEGOTIABLE):\n"
+            "- The face must be IDENTICAL to Image 1 — same bone structure, eyes, nose, lips, "
+            "jawline, skin tone, skin texture. NOT similar — IDENTICAL.\n"
+            "- Preserve ALL distinguishing features: glasses, facial hair, moles, freckles, "
+            "birthmarks, hair color, hair texture, ear shape, eyebrow shape.\n"
+            "- Same body type and proportions as Image 1.\n\n"
+            "CLOTHING RULES (NON-NEGOTIABLE):\n"
+            "- The clothing must match Image 2 EXACTLY — same design, same color, same pattern, "
+            "same fabric texture, same style details (buttons, zippers, collars, prints, logos).\n"
+            "- The clothing should fit naturally on the person's body — proper draping, "
+            "realistic wrinkles and folds based on their body shape.\n"
+            "- Do NOT modify the clothing design in any way. Do NOT change the color or pattern.\n\n"
+            "OUTPUT REQUIREMENTS:\n"
+            "- Full body or upper body shot showing the clothing clearly.\n"
+            "- Professional photography quality, studio or lifestyle setting.\n"
+            "- Natural pose that shows off the clothing well.\n"
+            "- Clean, well-lit background that doesn't distract from the outfit.\n"
+            "- Photorealistic result — should look like a real photo, not AI-generated."
+        )
+
+        if clothing_description:
+            base_prompt += (
+                f"\n\nADDITIONAL CONTEXT: {clothing_description}"
+            )
+
+        return base_prompt
+
+    # ─── Image extraction helper ─────────────────────────────────────────
+
+    def _extract_images_from_response(self, response) -> list[bytes]:
+        """Extract generated image bytes from a Gemini API response."""
+        images = []
+        if response.candidates:
+            for candidate in response.candidates:
+                if candidate.content and candidate.content.parts:
+                    for part in candidate.content.parts:
+                        if part.inline_data and part.inline_data.data:
+                            images.append(part.inline_data.data)
+        return images
+
+    # ─── Core generation methods ─────────────────────────────────────────
 
     async def generate_image(
         self,
         prompt: str,
         reference_image: bytes,
+        additional_references: list[bytes] | None = None,
         aspect_ratio: str = "1:1",
         number_of_images: int = 1,
     ) -> list[bytes]:
         """
-        Generate images using Nano Banana with a reference image.
+        Generate images preserving the person's identity from reference.
 
-        The reference image is sent along with a strict prompt that instructs
-        the model to preserve the person's facial features exactly.
-
-        Args:
-            prompt: User's description of the scene/activity
-            reference_image: The reference image bytes (original uploaded image)
-            aspect_ratio: Output aspect ratio
-            number_of_images: Number of images to generate (1-4)
-
-        Returns:
-            List of generated image bytes
+        Sends multiple reference images when available for stronger face anchoring.
         """
-        # Build the strict prompt with identity preservation instructions
         full_prompt = self._build_generation_prompt(user_prompt=prompt)
 
-        # Convert reference image bytes to PIL Image
-        reference_pil_image = self._bytes_to_pil_image(reference_image)
+        # Convert reference images to PIL
+        reference_pil = self._bytes_to_pil_image(reference_image)
 
-        # Build contents list with prompt and reference image
-        contents = [full_prompt, reference_pil_image]
+        # Build contents: prompt first, then all reference images
+        # Sending multiple refs gives the model more angles to lock onto the face
+        contents = [full_prompt, reference_pil]
 
-        # Generate images using the SDK
+        if additional_references:
+            for ref_bytes in additional_references[:3]:  # Max 3 extra refs
+                try:
+                    ref_pil = self._bytes_to_pil_image(ref_bytes)
+                    contents.append(ref_pil)
+                except Exception:
+                    continue
+
         generated_images = []
 
         for _ in range(number_of_images):
@@ -182,13 +221,71 @@ The final image should look like a professional photograph taken by a skilled ph
                 ),
             )
 
-            # Extract generated images from response
-            if response.candidates:
-                for candidate in response.candidates:
-                    if candidate.content and candidate.content.parts:
-                        for part in candidate.content.parts:
-                            if part.inline_data and part.inline_data.data:
-                                generated_images.append(part.inline_data.data)
+            generated_images.extend(self._extract_images_from_response(response))
+
+        return generated_images
+
+    async def generate_tryon(
+        self,
+        person_image: bytes,
+        clothing_image: bytes,
+        additional_person_refs: list[bytes] | None = None,
+        clothing_description: str = "",
+        aspect_ratio: str = "3:4",
+        number_of_images: int = 1,
+    ) -> list[bytes]:
+        """
+        Virtual try-on: Generate image of person wearing specific clothing.
+
+        Args:
+            person_image: Primary reference image of the person
+            clothing_image: Image of the clothing item to try on
+            additional_person_refs: Extra person photos for stronger face anchoring
+            clothing_description: Optional text describing the clothing
+            aspect_ratio: Output aspect ratio (default 3:4 for fashion)
+            number_of_images: Number of variations to generate (1-4)
+
+        Returns:
+            List of generated try-on image bytes
+        """
+        prompt = self._build_tryon_prompt(clothing_description)
+
+        # Convert images to PIL
+        person_pil = self._bytes_to_pil_image(person_image)
+        clothing_pil = self._bytes_to_pil_image(clothing_image)
+
+        # Build contents: prompt → person image(s) → clothing image
+        # Order matters: person refs first, clothing last, so the model
+        # clearly distinguishes "who" from "what to wear"
+        contents = [prompt, person_pil]
+
+        # Add extra person references for stronger identity lock
+        if additional_person_refs:
+            for ref_bytes in additional_person_refs[:2]:  # Max 2 extra
+                try:
+                    ref_pil = self._bytes_to_pil_image(ref_bytes)
+                    contents.append(ref_pil)
+                except Exception:
+                    continue
+
+        # Clothing image goes last
+        contents.append(clothing_pil)
+
+        generated_images = []
+
+        for _ in range(number_of_images):
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_modalities=["TEXT", "IMAGE"],
+                    image_config=types.ImageConfig(
+                        aspect_ratio=aspect_ratio,
+                    ),
+                ),
+            )
+
+            generated_images.extend(self._extract_images_from_response(response))
 
         return generated_images
 

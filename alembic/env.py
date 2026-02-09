@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 from app.database import Base
-from app.models import User, GeneratedImage  # noqa: F401
+from app.models import User, GeneratedImage, GeneratedVideo  # noqa: F401
 from app.config import get_settings
 
 config = context.config
