@@ -38,39 +38,39 @@ class NanoBananaService:
         prompt_lower = user_prompt.lower()
 
         scene_enhancements = {
-            "beach": "golden hour sunlight, ocean waves, warm tropical tones",
-            "gym": "modern fitness equipment, motivational atmosphere, dynamic energy",
-            "cafe": "cozy warm ambiance, artistic interior, soft natural light",
-            "coffee": "cozy cafe setting, warm atmosphere, comfortable seating",
-            "office": "modern professional workspace, clean aesthetic, natural daylight",
-            "nature": "lush greenery, vibrant colors, fresh outdoor atmosphere",
-            "city": "urban street photography, architectural backdrop, city life",
-            "home": "comfortable interior, warm homely atmosphere, soft lighting",
-            "party": "festive decorations, celebratory atmosphere, vibrant energy",
-            "wedding": "elegant romantic setting, beautiful decorations, soft dreamy light",
-            "mountain": "majestic peaks, breathtaking scenery, adventure spirit",
-            "restaurant": "fine dining ambiance, elegant table setting, warm lighting",
-            "park": "green surroundings, peaceful environment, natural beauty",
-            "hiking": "scenic trail, outdoor adventure, natural landscape",
-            "graduation": "academic ceremony, proud achievement, formal setting",
-            "concert": "dynamic stage lighting, energetic atmosphere, live music vibes",
+            "beach": "warm natural sunlight, ocean in background, sand texture, casual atmosphere, candid realism",
+            "gym": "overhead gym lights, worn equipment in background, natural sweat, candid phone photo feel",
+            "cafe": "indoor ambient light, coffee shop background, casual seating, everyday realism",
+            "coffee": "warm indoor light, cafe background, relaxed atmosphere, candid moment",
+            "office": "fluorescent office lighting, real workspace clutter, natural daylight from windows, casual realism",
+            "nature": "natural outdoor light, real greenery, unposed outdoor moment, candid realism",
+            "city": "urban street setting, natural city light, pedestrians in background, shot like a casual phone photo",
+            "home": "warm indoor lighting, lived-in interior, everyday home setting, candid realism",
+            "party": "mixed indoor lighting, real party setting, candid moment capture, not staged",
+            "wedding": "soft natural light, real venue setting, elegant but candid, genuine moment",
+            "mountain": "natural outdoor light, real mountain backdrop, hiking gear, candid trail moment",
+            "restaurant": "warm restaurant lighting, real table setting, casual dining moment, candid realism",
+            "park": "natural daylight, real park setting, trees and grass, casual outdoor moment",
+            "hiking": "natural trail lighting, outdoor scenery, real hiking moment, candid phone photo feel",
+            "graduation": "outdoor ceremony light, real academic setting, proud but candid moment",
+            "concert": "stage lights and crowd, live event atmosphere, candid fan photo energy",
         }
 
         mood_mappings = {
             ("happy", "joy", "celebrating", "party", "fun", "laugh", "smile"):
-                "genuine warm smile, joyful eyes",
+                "natural smile, relaxed and candid, not overly posed",
             ("confident", "business", "presentation", "professional", "meeting"):
-                "confident composed expression, professional demeanor",
+                "natural confident look, casual composure, realistic body language",
             ("relaxed", "beach", "vacation", "spa", "peaceful", "calm"):
-                "serene relaxed expression, comfortable natural pose",
+                "relaxed natural expression, casual unposed body language",
             ("excited", "adventure", "travel", "sports", "thrilled"):
-                "bright enthusiastic expression, dynamic energy",
+                "natural excited expression, caught mid-moment, candid energy",
             ("romantic", "date", "wedding", "love", "dinner"):
-                "soft tender expression, warm gaze",
+                "soft natural expression, genuine warmth, candid moment",
             ("elegant", "gala", "formal", "luxury", "fashion"):
-                "graceful refined expression, sophisticated poise",
+                "natural poise, real-feeling elegance, not overly staged",
             ("thoughtful", "reading", "studying", "working", "thinking"):
-                "contemplative thoughtful look, focused gaze",
+                "naturally focused, candid mid-thought moment, realistic gaze",
         }
 
         parts = [user_prompt]
@@ -88,7 +88,7 @@ class NanoBananaService:
                 break
 
         if not expression_added:
-            parts.append("natural authentic expression")
+            parts.append("natural expression, candid and unposed")
 
         return ", ".join(parts)
 
@@ -105,7 +105,7 @@ class NanoBananaService:
         enhanced_scene = self._enhance_user_prompt(user_prompt)
 
         prompt = (
-            f"This is a photo of a specific person. Generate a new photorealistic image "
+            f"This is a photo of a specific person. Generate a new image "
             f"of THIS EXACT SAME PERSON in the following scene: {enhanced_scene}.\n\n"
             f"CRITICAL RULES:\n"
             f"1. The person's face must be IDENTICAL to the reference — same bone structure, "
@@ -116,7 +116,9 @@ class NanoBananaService:
             f"3. Keep the same body type and proportions as the reference.\n"
             f"4. Any expression change must only involve natural muscle movement — the underlying "
             f"facial geometry must remain unchanged.\n"
-            f"5. Professional photography quality, cinematic lighting, sharp focus, realistic skin texture.\n\n"
+            f"5. Natural realistic lighting for the scene, realistic skin texture with natural "
+            f"imperfections, candid phone photo quality. Avoid overly polished or studio-perfect "
+            f"look. The image should feel like a real candid photo, not AI-generated. Almost real.\n\n"
             f"Scene: {user_prompt}"
         )
 
